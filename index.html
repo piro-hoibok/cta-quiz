@@ -22,14 +22,14 @@
 .nav button{flex:1;max-width:330px;padding:14px;font-size:18px;border:0;border-radius:12px;background:#3b6fe0;color:#fff}.nav button.s{background:#999}
 h2{margin:6px 0}
 .hd{position:sticky;top:0;z-index:2;background:#f5f6f8}
-.auth{max-width:680px;margin:0 auto;padding:8px 14px;display:flex;justify-content:flex-end;align-items:center;gap:8px;font-size:13px;color:#444}
+.auth{max-width:680px;margin:0 auto;padding:8px 14px;display:flex;flex-wrap:wrap;justify-content:flex-end;align-items:center;gap:8px;font-size:13px;color:#444}
 .auth button{font-family:inherit;font-size:14px;line-height:1.2;padding:8px 12px;border-radius:999px;border:1px solid #ccc;background:#fff;color:#222}
 .auth .who{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:min(58vw,420px)}
-.auth .err{color:#a33;font-size:12px;line-height:1.3;text-align:right}
+.auth .err{flex:1 0 100%;margin:0;background:#fdeaea;color:#9d1c1c;border:1px solid #f0b4b4;border-radius:8px;padding:8px 10px;font-size:14px;line-height:1.4;text-align:left}
 </style></head><body><header class="hd"><div class="auth" id="authbar">로그인 준비 중…</div></header><div class="w" id="app">불러오는 중…</div><div class="nav" id="nav"></div>
 <script type="module">
 const SRC=new URLSearchParams(location.search).get('q')||'questions.json';
-let D,S,K,user=null,auth=null,db=null,unsub=null,fs=null,authReady=false,syncErr='',syncGen=0;const $=id=>document.getElementById(id);
+let D,S,K,user=null,auth=null,db=null,unsub=null,fs=null,authReady=false,syncErr='',signInErr='',syncGen=0;const $=id=>document.getElementById(id);
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function save(){localStorage.setItem(K,JSON.stringify(S))}
 const TABS=[['all','전체'],['세법','세법'],['재무회계','재무회계'],['원가관리회계','원가관리회계'],['재정학','재정학'],['상법','상법'],['MC','오지선다'],['OX','OX']];
@@ -76,15 +76,15 @@ function applyRemote(id,data){if(data.answer!=null&&data.answer!=='')S.a[id]=dat
 function sameProgress(id,data){const ans=data.answer!=null&&data.answer!==''?data.answer:undefined;return S.a[id]===ans&&!!S.h[id]===!!data.h&&(Number(S.t[id])||0)===(Number(data.t)||0)}
 function mergeProgress(remote){const writes={};const ids=new Set([...Object.keys(S.a||{}),...Object.keys(S.h||{}),...Object.keys(S.t||{}),...Object.keys(remote||{})]);ids.forEach(id=>{const r=remote[id];const has=S.a[id]!==undefined||S.h[id]!==undefined||S.t[id]!==undefined;const lt=Number(S.t[id])||0;const rt=r?Number(r.t)||0:0;if(r&&(!has||rt>lt))applyRemote(id,r);else if(has&&(!r||lt>rt)){const t=lt||Date.now();S.t[id]=t;writes[id]=pack(id,t)}});return writes}
 function showSyncError(e){const code=e&&e.code||'';syncErr=code==='permission-denied'?'동기화 권한이 없어요. Firestore 규칙을 배포해 주세요.':(code==='auth/unauthorized-domain'?'이 도메인이 Firebase 승인 목록에 없어요.':'동기화에 실패했어요.');paintAuth()}
-function paintAuth(){const el=$('authbar');if(!el)return;if(!authReady){el.textContent='로그인 준비 중…';return}const err=syncErr?`<span class="err">${esc(syncErr)}</span>`:'';if(user){const name=user.displayName||user.email||'로그인됨';el.innerHTML=`<span class="who">${esc(name)}</span>${err}<button type="button" onclick="signOutGoogle()">로그아웃</button>`}else el.innerHTML=`${err}<button type="button" onclick="signInGoogle()">Google 로그인</button>`}
+function showSignInError(e){const code=e&&e.code||'';if(code==='auth/popup-closed-by-user'||code==='auth/cancelled-popup-request'){signInErr='';paintAuth();return}if(code==='auth/unauthorized-domain')signInErr='로그인에 실패했어요. 이 도메인이 Firebase 승인 목록에 없어요.';else signInErr='로그인에 실패했어요'+(code?' ('+code+')':'')+(e&&e.message?': '+String(e.message):'');paintAuth()}
+function paintAuth(){const el=$('authbar');if(!el)return;if(!authReady){el.textContent='로그인 준비 중…';return}const msg=[signInErr,syncErr].filter(Boolean).join(' ');const err=msg?`<p class="err" role="alert">${esc(msg)}</p>`:'';if(user){const name=user.displayName||user.email||'로그인됨';el.innerHTML=`<span class="who">${esc(name)}</span>${err}<button type="button" onclick="signOutGoogle()">로그아웃</button>`}else el.innerHTML=`${err}<button type="button" onclick="signInGoogle()">Google 로그인</button>`}
 function progressCol(uid){return fs.collection(db,'users',uid,'progress')}
 async function commitWrites(col,writes){const ids=Object.keys(writes);for(let i=0;i<ids.length;i+=400){const batch=fs.writeBatch(db);ids.slice(i,i+400).forEach(id=>batch.set(fs.doc(col,id),writes[id]));await batch.commit()}}
 function pushOne(id){if(!user||!fs)return;const t=S.t[id]||Date.now();S.t[id]=t;fs.setDoc(fs.doc(db,'users',user.uid,'progress',id),pack(id,t)).catch(showSyncError)}
 async function pushReset(ids,t){if(!user||!fs)return;const col=progressCol(user.uid);const all=new Set(ids);try{const snap=await fs.getDocs(col);snap.forEach(d=>all.add(d.id))}catch(e){showSyncError(e);return}const writes={};all.forEach(id=>{S.t[id]=Math.max(Number(S.t[id])||0,t);writes[id]={answer:null,ok:null,h:false,t:S.t[id]}});save();try{await commitWrites(col,writes)}catch(e){showSyncError(e)}}
 function listenProgress(col){unsub=fs.onSnapshot(col,snap=>{let changed=false;snap.docChanges().forEach(ch=>{const id=ch.doc.id;if(ch.type==='removed'){delete S.a[id];delete S.h[id];delete S.t[id];changed=true;return}if(ch.doc.metadata.hasPendingWrites)return;const data=ch.doc.data();const rt=Number(data.t)||0,lt=Number(S.t[id])||0;if(rt<lt){pushOne(id);return}if(sameProgress(id,data))return;applyRemote(id,data);changed=true});if(changed){save();render({keep:true})}},showSyncError)}
 async function startSync(u,gen){const col=progressCol(u.uid);const snap=await fs.getDocs(col);if(gen!==syncGen)return;const remote={};snap.forEach(d=>{remote[d.id]=d.data()});let writes=null;if(S.uid&&S.uid!==u.uid){S.a={};S.h={};S.t={};Object.keys(remote).forEach(id=>applyRemote(id,remote[id]))}else writes=mergeProgress(remote);if(gen!==syncGen)return;if(writes&&Object.keys(writes).length)await commitWrites(col,writes);if(gen!==syncGen)return;S.uid=u.uid;save();render({keep:true});listenProgress(col)}
-function isMobile(){return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)||(navigator.maxTouchPoints>1&&/Macintosh/.test(navigator.userAgent))}
-async function signInGoogle(){if(!auth||!authMod)return;syncErr='';paintAuth();const provider=new authMod.GoogleAuthProvider();try{if(isMobile()){await authMod.signInWithRedirect(auth,provider);return}await authMod.signInWithPopup(auth,provider)}catch(e){const code=e&&e.code||'';if(code==='auth/popup-closed-by-user'||code==='auth/cancelled-popup-request')return;try{await authMod.signInWithRedirect(auth,provider)}catch(e2){showSyncError(e2)}}}
+function signInGoogle(){if(!auth||!authMod){signInErr='로그인이 아직 준비되지 않았어요.';paintAuth();return}signInErr='';const provider=new authMod.GoogleAuthProvider();authMod.signInWithPopup(auth,provider).catch(e=>{const code=e&&e.code||'';if(code==='auth/popup-blocked'){try{sessionStorage.setItem('cta-auth-redirect','1')}catch(err){}authMod.signInWithRedirect(auth,provider).catch(e2=>{try{sessionStorage.removeItem('cta-auth-redirect')}catch(err){}showSignInError(e2)});return}showSignInError(e)})}
 async function signOutGoogle(){syncGen++;if(unsub){unsub();unsub=null}user=null;paintAuth();try{await authMod.signOut(auth)}catch(e){showSyncError(e)}}
 let authMod=null;
 async function bootAuth(){try{
@@ -95,9 +95,11 @@ async function bootAuth(){try{
   ]);
   authMod=aMod;fs={collection:fMod.collection,doc:fMod.doc,getDocs:fMod.getDocs,onSnapshot:fMod.onSnapshot,setDoc:fMod.setDoc,writeBatch:fMod.writeBatch};
   const app=appMod.initializeApp(firebaseConfig);
-  auth=aMod.getAuth(app);db=fMod.getFirestore(app);authReady=true;paintAuth();
-  aMod.getRedirectResult(auth).catch(showSyncError);
-  aMod.onAuthStateChanged(auth,async u=>{try{await quizReady}catch(e){return}const gen=++syncGen;if(unsub){unsub();unsub=null}user=u||null;syncErr='';paintAuth();if(!user)return;try{await startSync(user,gen)}catch(e){if(gen===syncGen)showSyncError(e)}});
+  auth=aMod.getAuth(app);db=fMod.getFirestore(app);
+  try{await aMod.setPersistence(auth,aMod.browserLocalPersistence)}catch(e){signInErr='로그인 저장소를 준비하지 못했어요'+(e&&e.code?' ('+e.code+')':'')}
+  authReady=true;paintAuth();
+  aMod.getRedirectResult(auth).then(res=>{let pending=false;try{pending=sessionStorage.getItem('cta-auth-redirect')==='1';sessionStorage.removeItem('cta-auth-redirect')}catch(e){}if(res&&res.user){signInErr='';paintAuth();return}if(pending){signInErr='로그인에 실패했어요. 다시 시도해 주세요.';paintAuth()}}).catch(e=>{try{sessionStorage.removeItem('cta-auth-redirect')}catch(err){}showSignInError(e)});
+  aMod.onAuthStateChanged(auth,async u=>{try{await quizReady}catch(e){return}const gen=++syncGen;if(unsub){unsub();unsub=null}user=u||null;if(user){signInErr='';syncErr=''}paintAuth();if(!user)return;try{await startSync(user,gen)}catch(e){if(gen===syncGen)showSyncError(e)}});
 }catch(e){const el=$('authbar');if(el)el.textContent='로그인을 불러오지 못했어요'}}
 Object.assign(window,{pick,tog,go,setTab,cp,resetQuiz,signInGoogle,signOutGoogle,mergeProgress,qid,ensureIds});
 bootAuth();
