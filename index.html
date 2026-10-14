@@ -1,5 +1,7 @@
 <!doctype html><html lang="ko"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-cache">
+<meta http-equiv="Pragma" content="no-cache">
 <meta name="robots" content="noindex,nofollow"><title>퀴즈</title>
 <style>
 *{box-sizing:border-box}body{margin:0;font-family:-apple-system,"Apple SD Gothic Neo","Noto Sans KR",sans-serif;font-size:18px;line-height:1.6;background:#f5f6f8;color:#222}
@@ -38,95 +40,7 @@ h2{margin:6px 0}
 .auth button{font-family:inherit;font-size:14px;line-height:1.2;padding:8px 12px;border-radius:999px;border:1px solid #ccc;background:#fff;color:#222}
 .auth .who{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:min(58vw,420px)}
 .auth .err{flex:1 0 100%;margin:0;background:#fdeaea;color:#9d1c1c;border:1px solid #f0b4b4;border-radius:8px;padding:8px 10px;font-size:14px;line-height:1.4;text-align:left}
+.sync{font-size:12px;line-height:1.2;padding:4px 8px;border-radius:999px;background:#eee;color:#444}.sync.ok{background:#e6f7ec;color:#146b34}.sync.bad{background:#fdeaea;color:#9d1c1c}
 .toast{position:fixed;left:50%;bottom:86px;transform:translateX(-50%);background:#222;color:#fff;font-size:14px;line-height:1.3;padding:8px 14px;border-radius:999px;z-index:40;pointer-events:none;max-width:calc(100% - 28px);text-align:center}
 </style></head><body><header class="hd"><div class="auth" id="authbar">로그인 준비 중…</div></header><div class="w" id="app">불러오는 중…</div><div class="nav" id="nav"></div>
-<script type="module">
-const SRC=new URLSearchParams(location.search).get('q')||'questions.json';
-let D,S,K,user=null,auth=null,db=null,unsub=null,fs=null,authReady=false,syncErr='',signInErr='',syncGen=0,manualNav=false,sheetOpen=false;const $=id=>document.getElementById(id);
-const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-function save(){localStorage.setItem(K,JSON.stringify(S))}
-const TABS=[['all','전체'],['세법','세법'],['재무회계','재무회계'],['원가관리회계','원가관리회계'],['재정학','재정학'],['상법','상법'],['MC','오지선다'],['OX','OX']];
-function subjOf(q){const s=String(q.subject==null?'':q.subject).replace(/\s+/g,'');if(s==='회계'||s==='재무회계')return '재무회계';if(s==='원가'||s==='원가관리회계')return '원가관리회계';return s}
-function typeOf(q){const t=String(q.type==null?'':q.type).trim();if(t==='MC'||t==='오지선다')return 'MC';if(t==='OX'||t.toLowerCase()==='ox')return 'OX';return t}
-function match(q,id){if(!id||id==='all')return true;if(id==='MC'||id==='OX')return typeOf(q)===id;return subjOf(q)===id}
-function listFor(id){const out=[];D.questions.forEach((q,i)=>{if(match(q,id))out.push(i)});return out}
-function synthId(q){const date=String(q.date||(D&&D.date)||'nd').trim().replace(/[^\w가-힣.-]+/g,'-')||'nd';const s=[q.subject,q.type,q.question,q.answer].map(x=>String(x??'')).join('\n');let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)}return date+'-'+(h>>>0).toString(36)}
-function ensureIds(){const seen=new Set();D.questions.forEach(q=>{const raw=q.id!=null&&String(q.id).trim()!==''?String(q.id).trim():'';if(raw&&!seen.has(raw)){seen.add(raw);q._qid=raw;return}let nid=synthId(q),n=2;while(seen.has(nid))nid=synthId(q)+'-'+(n++);seen.add(nid);q._qid=nid})}
-function qid(q){return q._qid||(q.id!=null?String(q.id).trim():synthId(q))}
-function stats(list){let ans=0,ok=0;list.forEach(i=>{const q=D.questions[i],a=S.a[qid(q)];if(a!==undefined){ans++;if(a==q.answer)ok++}});return {n:list.length,ans,ok}}
-function tabs(){const cur=S.f||'all';return `<div class="tabs" role="tablist">`+TABS.map(([id,label])=>{const st=stats(listFor(id));return `<button type="button" data-tab="${id}" role="tab" aria-selected="${cur===id?'true':'false'}" class="${cur===id?'on':''}" onclick="setTab('${id}')">${esc(label)}<small>${st.ans}/${st.n} · 정답 ${st.ok}</small></button>`}).join('')+`</div>`}
-function focusTab(){const b=document.querySelector('.tabs button.on');if(!b||!b.parentElement)return;const p=b.parentElement;p.scrollLeft=Math.max(0,b.offsetLeft-(p.clientWidth-b.offsetWidth)/2)}
-function qmeta(q){const bits=[q.date,q.source].filter(Boolean);return bits.length?`<div class="meta">${esc(bits.join(' · '))}</div>`:''}
-function numBtn(){return `<button type="button" class="numbtn" onclick="openNums()">번호</button>`}
-function placeResume(){const list=listFor(S.f||'all');if(!list.length)return;const next=list.find(i=>S.a[qid(D.questions[i])]===undefined);S.i=next==null?D.questions.length:next}
-function followProgress(){if(manualNav){render({keep:true});return}const prev=S.i;placeResume();render(S.i===prev?{keep:true}:undefined)}
-function sheetHtml(){if(!sheetOpen)return '';const list=listFor(S.f||'all');const cells=list.map((qi,n)=>{const q=D.questions[qi],id=qid(q),a=S.a[id];let cl=a===undefined?'':(a==q.answer?'ok':'no');if(S.h[id])cl+=' h';if(qi===S.i)cl+=' cur';return `<button type="button" class="${cl.trim()}" onclick="jump(${qi})">${n+1}</button>`}).join('');return `<div class="sheet" onclick="if(event.target===this)closeNums()"><div class="panel" role="dialog" aria-label="문제 번호"><div class="sheetbar"><b>번호</b><button type="button" class="numbtn" onclick="closeNums()">닫기</button></div><p class="legend">초록 정답 · 빨강 오답 · 노란 테두리 헷갈림</p><div class="grid">${cells||'<p>문제가 없어요.</p>'}</div></div></div>`}
-function openNums(){sheetOpen=true;render({keep:true})}
-function closeNums(){sheetOpen=false;render({keep:true})}
-function jump(i){const list=listFor(S.f||'all');if(list.indexOf(i)<0)return;manualNav=true;sheetOpen=false;S.i=i;save();render()}
-const quizReady=fetch(SRC,{cache:'no-store'}).then(r=>r.json()).then(d=>{D=d.questions?d:{title:'퀴즈',questions:d};ensureIds();K='cta-quiz:'+(D.date||D.title)+':'+D.questions.length;
-S=JSON.parse(localStorage.getItem(K)||'null')||{i:0,a:{},h:{},t:{}};if(!S.a)S.a={};if(!S.h)S.h={};if(!S.t)S.t={};if(!TABS.some(t=>t[0]===S.f))S.f='all';document.title=D.title||'퀴즈';placeResume();render()}).catch(e=>{$('app').textContent='문제를 불러오지 못했어요: '+e});
-function render(opts){const list=listFor(S.f||'all');if(!list.length)return empty(opts);if(S.i>=D.questions.length)return done(opts);let pos=list.indexOf(S.i);if(pos<0){S.i=list[0];pos=0}const q=D.questions[S.i],id=qid(q),a=S.a[id],ans=a!==undefined,st=stats(list),N=list.length;
-let h=tabs()+`<div class="bar"><i style="width:${(st.ans/N*100)}%"></i></div><div class="top"><span>${pos+1} / ${N} · ${esc(subjOf(q))} ${esc(q.type)}</span><span class="topr">${numBtn()}<span>${st.ans}문제 풂 · 정답 ${st.ok}/${N}</span></span></div>${qmeta(q)}<div class="q">${esc(q.question)}</div>`;
-h+=`<label class="cf"><input type="checkbox"${S.h[id]?' checked':''} onchange="tog()">헷갈림</label>`;
-h+=`<div class="ch ${q.type=='OX'?'ox':''}">`+q.choices.map((c,k)=>{const key=q.type=='OX'?c:c.trim()[0];let cl='';if(ans){if(key==q.answer)cl='ok';else if(key==a)cl='no'}
-return `<button class="${cl}" ${ans?'disabled':''} onclick="pick('${key}')">${esc(c)}</button>`}).join('')+`</div>`;
-if(ans){const ok=a==q.answer;h+=`<div class="r"><b class="${ok?'ok':'no'}">${ok?'⭕ 정답':'❌ 오답'}</b> · 정답 ${esc(q.answer)} (내 답 ${esc(a)})\n\n${esc(q.explanation)}</div>`}
-$('app').innerHTML=h+sheetHtml();if(!opts||!opts.keep)scrollTo(0,0);focusTab();
-$('nav').innerHTML=`<button class="s" onclick="go(-1)" ${pos?'':'disabled'}>이전</button><button onclick="go(1)">${pos==N-1?'결과 보기':(ans?'다음':'건너뛰기')}</button>`}
-function empty(opts){$('app').innerHTML=tabs()+`<div class="q">이 분류에 문제가 없어요.</div>`+sheetHtml();if(!opts||!opts.keep)scrollTo(0,0);focusTab();$('nav').innerHTML=`<button class="s" disabled>이전</button><button class="s" disabled>다음</button>`}
-function touch(id){S.t[id]=Date.now();save();if(user)pushOne(id)}
-function pick(k){const q=D.questions[S.i],id=qid(q);if(S.a[id]!==undefined)return;S.a[id]=k;touch(id);render();setTimeout(()=>document.querySelector('.r')&&document.querySelector('.r').scrollIntoView({behavior:'smooth'}),50)}
-function tog(){const q=D.questions[S.i],id=qid(q);S.h[id]=!S.h[id];touch(id);render()}
-function setTab(id){if(!TABS.some(t=>t[0]===id))return;if((S.f||'all')===id)return;S.f=id;sheetOpen=false;placeResume();save();render()}
-function go(d){manualNav=true;sheetOpen=false;const list=listFor(S.f||'all');if(!list.length){save();render();return}if(S.i>=D.questions.length){if(d<0)S.i=list[list.length-1]}else{const pos=list.indexOf(S.i);const np=(pos<0?0:pos)+d;if(np>=list.length)S.i=D.questions.length;else if(np<0)S.i=list[0];else S.i=list[np]}save();render()}
-function summary(){const Q=D.questions,list=listFor(S.f||'all');const w=[],c=[];let n=0;list.forEach(k=>{const q=Q[k],a=S.a[qid(q)];if(a==q.answer)n++;else w.push(k+1);if(S.h[qid(q)])c.push(k+1)});return {n,N:list.length,w,c}}
-function tabLines(){return TABS.filter(t=>t[0]!=='all').map(([id,lab])=>{const st=stats(listFor(id));return `${lab} 진행 ${st.ans}/${st.n} · 정답 ${st.ok}/${st.n}`})}
-function done(opts){const {n,N,w,c}=summary(),Q=D.questions;const label=TABS.find(t=>t[0]===(S.f||'all'))[1];const scope=S.f&&S.f!=='all'?` [${label}]`:'';const txt=`${D.title}${scope} ${n}/${N}, 오답: ${w.join(',')||'없음'} / 헷갈림: ${c.join(',')||'없음'}`;const lines=tabLines();const full=txt+'\n'+lines.join('\n');
-const li=a=>a.map(k=>{const q=Q[k-1],a=S.a[qid(q)];return `<li>${k}. [${esc(subjOf(q))}] ${esc(q.question.split('\n').slice(0,2).join(' ').slice(0,70))}… (정답 ${esc(q.answer)}${a!==undefined?', 내 답 '+esc(a):', 안 풂'})</li>`}).join('');
-$('app').innerHTML=tabs()+`<div class="top"><h2>결과${esc(scope)}</h2>${numBtn()}</div><div class="q" style="font-size:22px">정답 <b>${n}/${N}</b> · 헷갈림 <b>${c.length}</b></div><div class="r"><b>분류별 진행·점수</b><ul>${lines.map(s=>`<li>${esc(s)}</li>`).join('')}</ul></div><div class="r"><b>오답·안 푼 문제</b><ul>${li(w)||'<li>없음</li>'}</ul><b>헷갈림</b><ul>${li(c)||'<li>없음</li>'}</ul></div><div class="r" id="t">${esc(full)}</div>`+sheetHtml();
-if(!opts||!opts.keep)scrollTo(0,0);focusTab();
-$('nav').innerHTML=`<button class="s" onclick="go(-1)">문제로</button><button onclick="cp()">결과 복사</button><button class="s" onclick="resetQuiz()">다시</button>`;window._t=full}
-function resetQuiz(){if(!confirm('처음부터 다시 풀까요?'))return;const f=S.f||'all',uid=S.uid,t=Date.now();const ids=new Set([...Object.keys(S.a||{}),...Object.keys(S.h||{}),...Object.keys(S.t||{})]);S={i:0,a:{},h:{},t:{},f,uid};ids.forEach(id=>{S.t[id]=t});manualNav=false;sheetOpen=false;placeResume();save();render();if(user)pushReset(ids,t)}
-function kstNow(){const parts=Object.fromEntries(new Intl.DateTimeFormat('en-US',{timeZone:'Asia/Seoul',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date()).map(p=>[p.type,p.value]));return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}`}
-function head30(q){return String(q.question||'').replace(/\s+/g,' ').trim().slice(0,30)}
-function noteBlock(q,n){const id=qid(q),bits=[subjOf(q),typeOf(q)];const date=q.date||(D&&D.date);if(date)bits.push(date);if(q.source)bits.push(q.source);const lines=[`${n}) [${bits.join(' · ')}] ${id}`,'문제: '+String(q.question||'').trim()];if(typeOf(q)==='MC')lines.push('선지:\n'+(q.choices||[]).map(c=>String(c)).join('\n'));lines.push(`내 답: ${S.a[id]} / 정답: ${q.answer}`,'해설: '+String(q.explanation||'').trim(),'헷갈림: '+(S.h[id]?'예':'아니오'));return lines.join('\n')}
-function reportText(){const Q=D.questions,wrong=[],unsure=[],right=[],todo=[];Q.forEach(q=>{const a=S.a[qid(q)];if(a===undefined){todo.push(q);return}if(a==q.answer){(S.h[qid(q)]?unsure:right).push(q)}else wrong.push(q)});const st=stats(Q.map((_,i)=>i));const subjects=TABS.filter(t=>t[0]!=='all'&&t[0]!=='MC'&&t[0]!=='OX').map(([id,lab])=>{const list=Q.map((q,i)=>subjOf(q)===id?i:-1).filter(i=>i>=0);if(!list.length)return '';const s=stats(list);return `${lab} ${s.ok}/${s.n}`}).filter(Boolean);const sect=(title,body)=>`■ ${title}\n${body||'없음'}`;const blocks=(title,arr)=>sect(`${title} (${arr.length})`,arr.map((q,i)=>noteBlock(q,i+1)).join('\n\n'));return [`[세무사 1차 퀴즈 결과] ${kstNow()} KST`,`요약: 전체 진행 ${st.ans}/${st.n} · 정답 ${st.ok}${subjects.length?' / 과목별 '+subjects.join(', '):''}`,'',blocks('오답',wrong),'',blocks('맞혔지만 헷갈림',unsure),'',sect(`맞음 (${right.length})`,right.map(q=>`[${subjOf(q)}] ${qid(q)} ${head30(q)}`).join('\n')),sect(`미풀이 (${todo.length})`,todo.map(q=>qid(q)).join(', '))].join('\n')}
-function toast(msg){let el=$('toast');if(!el){el=document.createElement('div');el.id='toast';el.className='toast';el.setAttribute('role','status');document.body.appendChild(el)}el.textContent=msg;el.style.display='block';clearTimeout(toast._t);toast._t=setTimeout(()=>{el.style.display='none'},1600)}
-function copyText(t){const ok=()=>toast('복사했어요');const legacy=()=>{const ta=document.createElement('textarea');ta.value=t;ta.setAttribute('readonly','');ta.style.cssText='position:fixed;top:0;left:0;width:1px;height:1px;opacity:0';document.body.appendChild(ta);ta.focus();ta.select();ta.setSelectionRange(0,t.length);let done=false;try{done=document.execCommand('copy')}catch(e){}ta.remove();toast(done?'복사했어요':'복사에 실패했어요')};if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(t).then(ok,legacy);else legacy()}
-function cp(){copyText(reportText())}
-const firebaseConfig={apiKey:"AIzaSyDABwgUIuVQsX8pvLkXmY6rD-yTefikKdY",authDomain:"cat-quiz-5cb86.firebaseapp.com",projectId:"cat-quiz-5cb86",storageBucket:"cat-quiz-5cb86.firebasestorage.app",messagingSenderId:"492442954748",appId:"1:492442954748:web:77c47e769fe076d05a6079"};
-function qById(id){return D.questions.find(q=>qid(q)===String(id))}
-function pack(id,t){const ans=S.a[id],answered=ans!==undefined,q=qById(id);return {answer:answered?ans:null,ok:answered&&q?ans===q.answer:null,h:!!S.h[id],t}}
-function applyRemote(id,data){if(data.answer!=null&&data.answer!=='')S.a[id]=data.answer;else delete S.a[id];if(data.h)S.h[id]=true;else delete S.h[id];S.t[id]=Number(data.t)||0}
-function sameProgress(id,data){const ans=data.answer!=null&&data.answer!==''?data.answer:undefined;return S.a[id]===ans&&!!S.h[id]===!!data.h&&(Number(S.t[id])||0)===(Number(data.t)||0)}
-function mergeProgress(remote){const writes={};const ids=new Set([...Object.keys(S.a||{}),...Object.keys(S.h||{}),...Object.keys(S.t||{}),...Object.keys(remote||{})]);ids.forEach(id=>{const r=remote[id];const has=S.a[id]!==undefined||S.h[id]!==undefined||S.t[id]!==undefined;const lt=Number(S.t[id])||0;const rt=r?Number(r.t)||0:0;if(r&&(!has||rt>lt))applyRemote(id,r);else if(has&&(!r||lt>rt)){const t=lt||Date.now();S.t[id]=t;writes[id]=pack(id,t)}});return writes}
-function showSyncError(e){const code=e&&e.code||'';syncErr=code==='permission-denied'?'동기화 권한이 없어요. Firestore 규칙을 배포해 주세요.':(code==='auth/unauthorized-domain'?'이 도메인이 Firebase 승인 목록에 없어요.':'동기화에 실패했어요.');paintAuth()}
-function showSignInError(e){const code=e&&e.code||'';if(code==='auth/popup-closed-by-user'||code==='auth/cancelled-popup-request'){signInErr='';paintAuth();return}if(code==='auth/unauthorized-domain')signInErr='로그인에 실패했어요. 이 도메인이 Firebase 승인 목록에 없어요.';else signInErr='로그인에 실패했어요'+(code?' ('+code+')':'')+(e&&e.message?': '+String(e.message):'');paintAuth()}
-function paintAuth(){const el=$('authbar');if(!el)return;if(!authReady){el.textContent='로그인 준비 중…';return}const msg=[signInErr,syncErr].filter(Boolean).join(' ');const err=msg?`<p class="err" role="alert">${esc(msg)}</p>`:'';if(user){const name=user.displayName||user.email||'로그인됨';el.innerHTML=`<span class="who">${esc(name)}</span>${err}<button type="button" onclick="signOutGoogle()">로그아웃</button>`}else el.innerHTML=`${err}<button type="button" onclick="signInGoogle()">Google 로그인</button>`}
-function progressCol(uid){return fs.collection(db,'users',uid,'progress')}
-async function commitWrites(col,writes){const ids=Object.keys(writes);for(let i=0;i<ids.length;i+=400){const batch=fs.writeBatch(db);ids.slice(i,i+400).forEach(id=>batch.set(fs.doc(col,id),writes[id]));await batch.commit()}}
-function pushOne(id){if(!user||!fs)return;const t=S.t[id]||Date.now();S.t[id]=t;fs.setDoc(fs.doc(db,'users',user.uid,'progress',id),pack(id,t)).catch(showSyncError)}
-async function pushReset(ids,t){if(!user||!fs)return;const col=progressCol(user.uid);const all=new Set(ids);try{const snap=await fs.getDocs(col);snap.forEach(d=>all.add(d.id))}catch(e){showSyncError(e);return}const writes={};all.forEach(id=>{S.t[id]=Math.max(Number(S.t[id])||0,t);writes[id]={answer:null,ok:null,h:false,t:S.t[id]}});save();try{await commitWrites(col,writes)}catch(e){showSyncError(e)}}
-function listenProgress(col){unsub=fs.onSnapshot(col,snap=>{let changed=false;snap.docChanges().forEach(ch=>{const id=ch.doc.id;if(ch.type==='removed'){delete S.a[id];delete S.h[id];delete S.t[id];changed=true;return}if(ch.doc.metadata.hasPendingWrites)return;const data=ch.doc.data();const rt=Number(data.t)||0,lt=Number(S.t[id])||0;if(rt<lt){pushOne(id);return}if(sameProgress(id,data))return;applyRemote(id,data);changed=true});if(changed){save();followProgress()}},showSyncError)}
-async function startSync(u,gen){const col=progressCol(u.uid);const snap=await fs.getDocs(col);if(gen!==syncGen)return;const remote={};snap.forEach(d=>{remote[d.id]=d.data()});let writes=null;if(S.uid&&S.uid!==u.uid){S.a={};S.h={};S.t={};Object.keys(remote).forEach(id=>applyRemote(id,remote[id]))}else writes=mergeProgress(remote);if(gen!==syncGen)return;if(writes&&Object.keys(writes).length)await commitWrites(col,writes);if(gen!==syncGen)return;S.uid=u.uid;save();followProgress();listenProgress(col)}
-function signInGoogle(){if(!auth||!authMod){signInErr='로그인이 아직 준비되지 않았어요.';paintAuth();return}signInErr='';const provider=new authMod.GoogleAuthProvider();authMod.signInWithPopup(auth,provider).catch(e=>{const code=e&&e.code||'';if(code==='auth/popup-blocked'){try{sessionStorage.setItem('cta-auth-redirect','1')}catch(err){}authMod.signInWithRedirect(auth,provider).catch(e2=>{try{sessionStorage.removeItem('cta-auth-redirect')}catch(err){}showSignInError(e2)});return}showSignInError(e)})}
-async function signOutGoogle(){syncGen++;if(unsub){unsub();unsub=null}user=null;paintAuth();try{await authMod.signOut(auth)}catch(e){showSyncError(e)}}
-let authMod=null;
-async function bootAuth(){try{
-  const [appMod,aMod,fMod]=await Promise.all([
-    import('https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js'),
-    import('https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js'),
-    import('https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js')
-  ]);
-  authMod=aMod;fs={collection:fMod.collection,doc:fMod.doc,getDocs:fMod.getDocs,onSnapshot:fMod.onSnapshot,setDoc:fMod.setDoc,writeBatch:fMod.writeBatch};
-  const app=appMod.initializeApp(firebaseConfig);
-  auth=aMod.getAuth(app);db=fMod.getFirestore(app);
-  try{await aMod.setPersistence(auth,aMod.browserLocalPersistence)}catch(e){signInErr='로그인 저장소를 준비하지 못했어요'+(e&&e.code?' ('+e.code+')':'')}
-  authReady=true;paintAuth();
-  aMod.getRedirectResult(auth).then(res=>{let pending=false;try{pending=sessionStorage.getItem('cta-auth-redirect')==='1';sessionStorage.removeItem('cta-auth-redirect')}catch(e){}if(res&&res.user){signInErr='';paintAuth();return}if(pending){signInErr='로그인에 실패했어요. 다시 시도해 주세요.';paintAuth()}}).catch(e=>{try{sessionStorage.removeItem('cta-auth-redirect')}catch(err){}showSignInError(e)});
-  aMod.onAuthStateChanged(auth,async u=>{try{await quizReady}catch(e){return}const gen=++syncGen;if(unsub){unsub();unsub=null}user=u||null;if(user){signInErr='';syncErr=''}paintAuth();if(!user)return;try{await startSync(user,gen)}catch(e){if(gen===syncGen)showSyncError(e)}});
-}catch(e){const el=$('authbar');if(el)el.textContent='로그인을 불러오지 못했어요'}}
-Object.assign(window,{pick,tog,go,setTab,cp,resetQuiz,signInGoogle,signOutGoogle,mergeProgress,qid,ensureIds,openNums,closeNums,jump,followProgress,reportText});
-bootAuth();
-</script></body></html>
+<script type="module" src="quiz.js?v=20261014f"></script></body></html>
