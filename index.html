@@ -10,7 +10,7 @@
 .ch button{display:block;width:100%;text-align:left;margin:10px 0;padding:14px;font-size:18px;border:2px solid #ccc;border-radius:12px;background:#fff;min-height:56px}
 .ox{display:flex;gap:12px}.ox button{flex:1;text-align:center;font-size:40px;font-weight:700}
 .ch button.ok{border-color:#1a9a4a;background:#e6f7ec}.ch button.no{border-color:#d33;background:#fdeaea}
-.tg{display:block;width:100%;padding:12px;font-size:17px;border-radius:12px;border:2px dashed #e6a700;background:#fff;margin:8px 0}.tg.on{background:#fff4cc;border-style:solid}
+.cf{display:inline-flex;align-items:center;gap:6px;margin:8px 0 0;font-size:16px}.cf input{width:18px;height:18px;margin:0}
 .r{background:#fff;border-radius:12px;padding:16px;margin-top:10px;white-space:pre-wrap}.r b.ok{color:#1a9a4a}.r b.no{color:#d33}
 .nav{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid #ddd;padding:10px 14px;display:flex;gap:10px;justify-content:center}
 .nav button{flex:1;max-width:330px;padding:14px;font-size:18px;border:0;border-radius:12px;background:#3b6fe0;color:#fff}.nav button.s{background:#999}
@@ -24,9 +24,9 @@ fetch(SRC,{cache:'no-store'}).then(r=>r.json()).then(d=>{D=d.questions?d:{title:
 S=JSON.parse(localStorage.getItem(K)||'null')||{i:0,a:{},h:{}};document.title=D.title||'퀴즈';render()}).catch(e=>{$('app').textContent='문제를 불러오지 못했어요: '+e});
 function render(){const N=D.questions.length;if(S.i>=N)return done();const q=D.questions[S.i],a=S.a[q.id],ans=a!==undefined;
 let h=`<div class="bar"><i style="width:${(Object.keys(S.a).length/N*100)}%"></i></div><div class="top"><span>${S.i+1} / ${N} · ${esc(q.subject)} ${q.type}</span><span>${Object.keys(S.a).length}문제 풂</span></div><div class="q">${esc(q.question)}</div>`;
+h+=`<label class="cf"><input type="checkbox"${S.h[q.id]?' checked':''} onchange="tog()">헷갈림</label>`;
 h+=`<div class="ch ${q.type=='OX'?'ox':''}">`+q.choices.map((c,k)=>{const key=q.type=='OX'?c:c.trim()[0];let cl='';if(ans){if(key==q.answer)cl='ok';else if(key==a)cl='no'}
 return `<button class="${cl}" ${ans?'disabled':''} onclick="pick('${key}')">${esc(c)}</button>`}).join('')+`</div>`;
-h+=`<button class="tg ${S.h[q.id]?'on':''}" onclick="tog()">${S.h[q.id]?'✔ 헷갈림 표시됨':'헷갈림 표시하기'}</button>`;
 if(ans){const ok=a==q.answer;h+=`<div class="r"><b class="${ok?'ok':'no'}">${ok?'⭕ 정답':'❌ 오답'}</b> · 정답 ${esc(q.answer)} (내 답 ${esc(a)})\n\n${esc(q.explanation)}</div>`}
 $('app').innerHTML=h;scrollTo(0,0);
 $('nav').innerHTML=`<button class="s" onclick="go(-1)" ${S.i?'':'disabled'}>이전</button><button onclick="go(1)">${S.i==N-1?'결과 보기':(ans?'다음':'건너뛰기')}</button>`}
