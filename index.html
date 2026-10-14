@@ -1,0 +1,42 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow"><title>퀴즈</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:-apple-system,"Apple SD Gothic Neo","Noto Sans KR",sans-serif;font-size:18px;line-height:1.6;background:#f5f6f8;color:#222}
+.w{max-width:680px;margin:0 auto;padding:14px 14px 90px}
+.bar{height:8px;background:#ddd;border-radius:4px;overflow:hidden}.bar i{display:block;height:100%;background:#3b6fe0}
+.top{display:flex;justify-content:space-between;font-size:15px;color:#666;margin:8px 0}
+.q{background:#fff;border-radius:12px;padding:16px;white-space:pre-wrap;word-break:keep-all}
+.ch button{display:block;width:100%;text-align:left;margin:10px 0;padding:14px;font-size:18px;border:2px solid #ccc;border-radius:12px;background:#fff;min-height:56px}
+.ox{display:flex;gap:12px}.ox button{flex:1;text-align:center;font-size:40px;font-weight:700}
+.ch button.ok{border-color:#1a9a4a;background:#e6f7ec}.ch button.no{border-color:#d33;background:#fdeaea}
+.tg{display:block;width:100%;padding:12px;font-size:17px;border-radius:12px;border:2px dashed #e6a700;background:#fff;margin:8px 0}.tg.on{background:#fff4cc;border-style:solid}
+.r{background:#fff;border-radius:12px;padding:16px;margin-top:10px;white-space:pre-wrap}.r b.ok{color:#1a9a4a}.r b.no{color:#d33}
+.nav{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid #ddd;padding:10px 14px;display:flex;gap:10px;justify-content:center}
+.nav button{flex:1;max-width:330px;padding:14px;font-size:18px;border:0;border-radius:12px;background:#3b6fe0;color:#fff}.nav button.s{background:#999}
+h2{margin:6px 0}</style></head><body><div class="w" id="app">불러오는 중…</div><div class="nav" id="nav"></div>
+<script>
+const SRC=new URLSearchParams(location.search).get('q')||'questions.json';
+let D,S,K;const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function save(){localStorage.setItem(K,JSON.stringify(S))}
+fetch(SRC,{cache:'no-store'}).then(r=>r.json()).then(d=>{D=d.questions?d:{title:'퀴즈',questions:d};K='cta-quiz:'+(D.date||D.title)+':'+D.questions.length;
+S=JSON.parse(localStorage.getItem(K)||'null')||{i:0,a:{},h:{}};document.title=D.title||'퀴즈';render()}).catch(e=>{$('app').textContent='문제를 불러오지 못했어요: '+e});
+function render(){const N=D.questions.length;if(S.i>=N)return done();const q=D.questions[S.i],a=S.a[q.id],ans=a!==undefined;
+let h=`<div class="bar"><i style="width:${(Object.keys(S.a).length/N*100)}%"></i></div><div class="top"><span>${S.i+1} / ${N} · ${esc(q.subject)} ${q.type}</span><span>${Object.keys(S.a).length}문제 풂</span></div><div class="q">${esc(q.question)}</div>`;
+h+=`<div class="ch ${q.type=='OX'?'ox':''}">`+q.choices.map((c,k)=>{const key=q.type=='OX'?c:c.trim()[0];let cl='';if(ans){if(key==q.answer)cl='ok';else if(key==a)cl='no'}
+return `<button class="${cl}" ${ans?'disabled':''} onclick="pick('${key}')">${esc(c)}</button>`}).join('')+`</div>`;
+h+=`<button class="tg ${S.h[q.id]?'on':''}" onclick="tog()">${S.h[q.id]?'✔ 헷갈림 표시됨':'헷갈림 표시하기'}</button>`;
+if(ans){const ok=a==q.answer;h+=`<div class="r"><b class="${ok?'ok':'no'}">${ok?'⭕ 정답':'❌ 오답'}</b> · 정답 ${esc(q.answer)} (내 답 ${esc(a)})\n\n${esc(q.explanation)}</div>`}
+$('app').innerHTML=h;scrollTo(0,0);
+$('nav').innerHTML=`<button class="s" onclick="go(-1)" ${S.i?'':'disabled'}>이전</button><button onclick="go(1)">${S.i==N-1?'결과 보기':(ans?'다음':'건너뛰기')}</button>`}
+function pick(k){const q=D.questions[S.i];if(S.a[q.id]!==undefined)return;S.a[q.id]=k;save();render();setTimeout(()=>document.querySelector('.r').scrollIntoView({behavior:'smooth'}),50)}
+function tog(){const q=D.questions[S.i];S.h[q.id]=!S.h[q.id];save();render()}
+function go(d){S.i=Math.max(0,S.i+d);save();render()}
+function summary(){const Q=D.questions,N=Q.length;const w=[],c=[];let n=0;Q.forEach((q,k)=>{const a=S.a[q.id];if(a==q.answer)n++;else w.push(k+1);if(S.h[q.id])c.push(k+1)});return {n,N,w,c}}
+function done(){const {n,N,w,c}=summary(),Q=D.questions;const txt=`${D.title} ${n}/${N}, 오답: ${w.join(',')||'없음'} / 헷갈림: ${c.join(',')||'없음'}`;
+const li=a=>a.map(k=>`<li>${k}. [${esc(Q[k-1].subject)}] ${esc(Q[k-1].question.split('\n').slice(0,2).join(' ').slice(0,70))}… (정답 ${esc(Q[k-1].answer)}${S.a[Q[k-1].id]?', 내 답 '+esc(S.a[Q[k-1].id]):', 안 풂'})</li>`).join('');
+$('app').innerHTML=`<h2>결과</h2><div class="q" style="font-size:22px">정답 <b>${n}/${N}</b> · 헷갈림 <b>${c.length}</b></div><div class="r"><b>오답·안 푼 문제</b><ul>${li(w)||'<li>없음</li>'}</ul><b>헷갈림</b><ul>${li(c)||'<li>없음</li>'}</ul></div><div class="r" id="t">${esc(txt)}</div>`;
+$('nav').innerHTML=`<button class="s" onclick="go(-1)">문제로</button><button onclick="cp()">결과 복사</button><button class="s" onclick="if(confirm('처음부터 다시 풀까요?')){S={i:0,a:{},h:{}};save();render()}">다시</button>`;window._t=txt}
+function cp(){const t=window._t;(navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(()=>alert('복사했어요'),()=>{const r=document.createRange();r.selectNode($('t'));getSelection().removeAllRanges();getSelection().addRange(r);document.execCommand('copy');alert('복사했어요')})}
+</script></body></html>
