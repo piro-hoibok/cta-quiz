@@ -1,4 +1,4 @@
-const BUILD='20261017a';
+const BUILD='20261018a';
 const SRC=new URLSearchParams(location.search).get('q')||('questions.json?v='+BUILD);
 let D,S,K,user=null,auth=null,db=null,unsub=null,fs=null,authReady=false,syncErr='',signInErr='',syncState='',syncGen=0,writeChain=Promise.resolve(),manualNav=false,sheetOpen=false,explicitResults=false,reviewHold=null;const $=id=>document.getElementById(id);
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
