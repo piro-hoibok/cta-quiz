@@ -1,4 +1,4 @@
-const BUILD='20261110a';
+const BUILD='20261110b';
 const SRC=new URLSearchParams(location.search).get('q')||('questions.json?v='+BUILD);
 let D,S,K,user=null,auth=null,db=null,unsub=null,fs=null,authReady=false,syncErr='',signInErr='',syncState='',syncGen=0,writeChain=Promise.resolve(),manualNav=false,sheetOpen=false,explicitResults=false,reviewHold=null;const $=id=>document.getElementById(id);
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -7,6 +7,7 @@ const TABS=[['today','오늘'],['review','복습'],['all','전체'],['세법','�
 const BACKFILL='2026-10-14';
 function subjOf(q){const s=String(q.subject==null?'':q.subject).replace(/\s+/g,'');if(s==='회계'||s==='재무회계')return '재무회계';if(s==='원가'||s==='원가관리회계')return '원가관리회계';return s}
 function typeOf(q){const t=String(q.type==null?'':q.type).trim();if(t==='MC'||t==='오지선다')return 'MC';if(t==='OX'||t.toLowerCase()==='ox')return 'OX';return t}
+function choicesOf(q){const c=Array.isArray(q.choices)?q.choices:[];if(typeOf(q)==='OX'&&c.length===0)return ['O','X'];return c}
 function qDate(q){const raw=String(q&&q.date||D&&D.date||BACKFILL).trim();const m=raw.match(/\d{4}-\d{2}-\d{2}/);return m?m[0]:BACKFILL}
 function kstDay(){return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Seoul',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())}
 function todayInfo(){const today=kstDay();let latest='';D.questions.forEach(q=>{const d=qDate(q);if(d>latest)latest=d});const has=D.questions.some(q=>qDate(q)===today);return {today,use:has?today:latest,fallback:!has&&!!latest}}
@@ -37,7 +38,7 @@ S=JSON.parse(localStorage.getItem(K)||'null')||{i:0,a:{},h:{},t:{}};if(!S.a)S.a=
 function render(opts){const tab=S.f||'all',list=listFor(tab);if(reviewHold!=null&&(tab!=='review'||!D.questions[reviewHold]||needsReview(D.questions[reviewHold])))reviewHold=null;const holding=reviewHold!=null&&S.i===reviewHold;if(!list.length&&!holding)return empty(opts);if(!holding&&S.i>=D.questions.length){const open=tab==='review'?list[0]:list.find(i=>S.a[qid(D.questions[i])]===undefined);if(explicitResults||(open==null&&list.length))return done(opts);if(open!=null)S.i=open}let pos=holding?-1:list.indexOf(S.i);if(!holding&&pos<0){S.i=list[0];pos=0}const q=D.questions[S.i],id=qid(q),a=S.a[id],ans=a!==undefined,st=stats(list),N=list.length,retry=tab==='review';
 let h=tabs()+tabNote()+`<div class="bar"><i style="width:${N?st.ans/N*100:0}%"></i></div><div class="top"><span>${holding?'이번 시도':pos+1+' / '+N} · ${esc(subjOf(q))} ${esc(q.type)}</span><span class="topr">${numBtn()}<span>${st.ans}문제 풂 · 정답 ${st.ok}/${N}</span></span></div>${qmeta(q)}<div class="q">${esc(q.question)}</div>`;
 h+=`<label class="cf"><input type="checkbox"${S.h[id]?' checked':''} onchange="tog()">헷갈림</label>`;
-h+=`<div class="ch ${typeOf(q)=='OX'?'ox':''}">`+q.choices.map((c)=>{const key=typeOf(q)=='OX'?c:c.trim()[0];let cl='';if(ans){if(key==q.answer)cl='ok';else if(key==a)cl='no'}
+h+=`<div class="ch ${typeOf(q)=='OX'?'ox':''}">`+choicesOf(q).map((c)=>{const key=typeOf(q)=='OX'?String(c).trim():c.trim()[0];let cl='';if(ans){if(key==q.answer)cl='ok';else if(key==a)cl='no'}
 return `<button class="${cl}" ${ans&&!retry?'disabled':''} onclick="pick('${key}')">${esc(c)}</button>`}).join('')+`</div>`;
 if(ans){const ok=a==q.answer;h+=`<div class="r"><b class="${ok?'ok':'no'}">${ok?'⭕ 정답':'❌ 오답'}</b> · 정답 ${esc(q.answer)} (내 답 ${esc(a)})\n\n${esc(q.explanation)}</div>`}
 $('app').innerHTML=h+sheetHtml();if(!opts||!opts.keep)scrollTo(0,0);focusTab();
