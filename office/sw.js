@@ -1,5 +1,5 @@
 /* 우량식품 비서실 — 가벼운 오프라인 캐시 Service Worker */
-const CACHE = 'goodfood-office-v1';
+const CACHE = 'goodfood-office-v1.4';
 const CORE = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', (event) => {
